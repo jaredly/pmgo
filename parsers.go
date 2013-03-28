@@ -1,24 +1,13 @@
 package main
 
 // import "io/ioutil"
-import "fmt"
+// import "fmt"
 import "log"
 import "time"
 
 // import "strconv"
 // import "strings"
 import "launchpad.net/goyaml"
-
-type A struct {
-	string
-}
-
-type m string
-
-func (a m) SetYAML(tag string, value string) bool {
-	fmt.Printf("Out: %q %q\n", tag, value)
-	return true
-}
 
 /*
 The planner looks like a list of tasks:
@@ -46,12 +35,26 @@ type yamlTask struct {
 	Items     []yamlTask
 }
 
+// Parse timesheet.yaml into a `yamlTask` tree
+//
+// Arguments:
+//
+//  - data: the yaml data
+//
+// @tested
 func parseYamlTask(data []byte) []yamlTask {
 	var res []yamlTask
 	goyaml.Unmarshal(data, &res)
 	return res
 }
 
+// Return the number of yamlTasks in the tree
+//
+// Arguments:
+//
+//  - yaml: list of toplevel yamltasks
+//
+// @tested
 func countYamlTasks(yaml *[]yamlTask, count *int64) {
 	for _, item := range *yaml {
 		*count += 1
@@ -59,24 +62,13 @@ func countYamlTasks(yaml *[]yamlTask, count *int64) {
 	}
 }
 
-// Here we take a list of embedded yamlTasks, unfold them, and fill in IDs
-// where needed.
-func processYamlTasks(yaml *[]yamlTask) map[int64]Task {
-	var count int64
-	countYamlTasks(yaml, &count)
-	// TODO make a few extra boxes?
-	tasks := make(map[int64]Task)
-	var unassigned int64 = -1
-	// prepare a list to map our unassigned task ids
-	unassigneds := make([]int64, count)
-	var max int64 = 1
-	var firstParent int64 = 0
-	unfoldYamlTasks(yaml, &tasks, &unassigned, &max, &firstParent, &unassigneds)
-	return tasks
-}
-
-// func processYamlTask(yaml *[]
-
+// Go through all of the tasks that are unassigned
+//
+// Arguments:
+//
+//  - tasks: the hash of all the _Tasks_
+//  - max:   the highest task id we have
+//  - unassigneds: the list of ints
 func unfoldYamlTasks(yaml *[]yamlTask, tasks *map[int64]Task,
 	unassigned *int64, max *int64, parent *int64,
 	unassigneds *[]int64) {
@@ -131,6 +123,29 @@ func unfoldYamlTasks(yaml *[]yamlTask, tasks *map[int64]Task,
 	}
 }
 
+// Here we take a list of embedded yamlTasks, unfold them, and fill in IDs
+// where needed.
+//
+// Arguments:
+//
+//  - yaml: yamlTask
+//
+// 
+func processYamlTasks(yaml *[]yamlTask) map[int64]Task {
+	var count int64 = 0
+	countYamlTasks(yaml, &count)
+	// TODO make a few extra boxes?
+	tasks := make(map[int64]Task)
+	var unassigned int64 = -1
+	// prepare a list to map our unassigned task ids
+	unassigneds := make([]int64, count)
+	var max int64 = 1
+	var firstParent int64 = 0
+	unfoldYamlTasks(yaml, &tasks, &unassigned, &max, &firstParent, &unassigneds)
+    // reassignYamlTasks(&tasks, &max, &unassigneds, &unassigned)
+	return tasks
+}
+
 /*
 func ParsePlanner(data []byte) map[int64]Task, error {
     var result []yamlTask
@@ -158,3 +173,4 @@ weekname:
           completed: done
 **/
 // func ParseTimesheet(data []byte) map[Week]D
+

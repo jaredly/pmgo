@@ -11,7 +11,9 @@ import "log"
 // - defaultt: the time to return by default (of parsing fails)
 // - today:     the time to treat as "today" (if today or yesterday are used)
 //
-// Reutrns: `time.Time`
+// Returns: `time.Time`
+//
+// @tested
 func parseDate(date string, defaultt time.Time, today time.Time) time.Time {
 	if date == "" {
 		return defaultt
@@ -35,3 +37,4 @@ func parseDate(date string, defaultt time.Time, today time.Time) time.Time {
 	log.Printf("Warning: unrecognizable date. Defaulting to today: %q\n", date)
 	return today
 }
+

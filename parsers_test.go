@@ -25,14 +25,12 @@ var parseTests = []struct {
 		`- name: one
   date: two
   id:   5
-  completed: 05-6-1991
-`, []yamlTask{{"one", "two", 5, "05-6-1991", nil}},
+  completed: 05-6-1991`, []yamlTask{{"one", "two", 5, "05-6-1991", nil}},
 	}, {
 		`- name: one
   items:
   - name: two
-    date: three
-`, []yamlTask{{"one", "", 0, "", []yamlTask{{"two", "three", 0, "", nil}}}},
+    date: three`, []yamlTask{{"one", "", 0, "", []yamlTask{{"two", "three", 0, "", nil}}}},
 	},
 }
 
@@ -44,6 +42,107 @@ func (s *MySuite) TestParseYamlTask(c *C) {
 		c.Check(res, DeepEquals, item.value)
 	}
 }
+
+var countYamlTests = []struct {
+  data []yamlTask
+  count int64
+} {
+  {
+    []yamlTask {
+    },
+    0,
+  }, {
+    []yamlTask {
+      {"", "", 0, "", nil},
+    },
+    1,
+  }, {
+    []yamlTask {
+      {"", "", 0, "", nil},
+      {"", "", 0, "", nil},
+      {"", "", 0, "", nil},
+    },
+    3,
+  }, {
+    []yamlTask {
+      {"", "", 0, "", []yamlTask {
+        {"", "", 0, "", nil},
+      }},
+    },
+    2,
+  }, {
+    []yamlTask {
+      {"", "", 0, "", []yamlTask {
+        {"", "", 0, "", nil},
+      }},
+      {"", "", 0, "", []yamlTask {
+        {"", "", 0, "", nil},
+      }},
+    },
+    4,
+  }, {
+    []yamlTask {
+      {"", "", 0, "", []yamlTask {
+          {"", "", 0, "", []yamlTask {
+            {"", "", 0, "", nil},
+          }},
+          {"", "", 0, "", nil},
+        },
+      },
+      {"", "", 0, "", []yamlTask {
+        {"", "", 0, "", nil},
+      }},
+    },
+    6,
+  },
+}
+
+func (s *MySuite) TestCountYamlTests(c *C) {
+  for _, item := range countYamlTests {
+    var count int64 = 0
+    countYamlTasks(&item.data, &count)
+    c.Check(count, Equals, item.count)
+  }
+}
+
+/*
+var unfoldTasks = []struct {
+  input []yamlTask,
+  output map[int64]Task
+  unassigneds []int64
+  unassigned int64
+} {
+
+}
+
+// Test _unfoldYamlTasks_
+func (s *MySuite) TestUnfoldYamlTasks(c *C) {
+  for _, item := range unfoldTests {
+    unassigneds := make([]int64, item.count)
+    firstParent := 0
+    unfoldYamlTasks(item.input, tasks, 
+    res := 
+    c.Check(res, DeepEquals, item.output
+  }
+}
+*/
+
+
+/**
+var processTests = []struct {
+  input []yamlTask
+  output map[int64]Task
+} {
+
+}
+
+// Test _processYamlTasks_
+func (s *MySuite) TestProcessYamlTasks(c *C) {
+  for _, item := range processTests {
+    c.Check(res, DeepEquals, item.output)
+  }
+}
+*/
 
 /*
 func (s *MySuite) TestParsePlanner() {
@@ -61,3 +160,4 @@ func (s *MySuite) TestParsePlanner() {
     c.Check(os.Errno(13), Matches, "perm.*accepted")
 }
 */
+

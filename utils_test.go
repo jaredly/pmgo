@@ -38,3 +38,4 @@ func (s *MyUtilsSuite) TestParseDate(c *C) {
 		c.Check(res, DeepEquals, item.value)
 	}
 }
+

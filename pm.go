@@ -4,7 +4,7 @@ import "io/ioutil"
 import "fmt"
 
 // import "strconv"
-import "launchpad.net/goyaml"
+// import "launchpad.net/goyaml"
 
 // import "strings"
 
@@ -70,12 +70,3 @@ func main() {
 	fmt.Println("Hello, 世界")
 }
 
-func _main() {
-	text := []byte("- abc\n- def\n- efg\n- fgh\n- ghi\n")
-	var res []m
-	err := goyaml.Unmarshal(text, &res)
-	if err != nil {
-		fmt.Printf("Bad: %s\n", text)
-	}
-	fmt.Printf("Text: %s\nVal: %s\n", text, res)
-}
