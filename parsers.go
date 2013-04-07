@@ -1,176 +1,252 @@
 package main
 
 // import "io/ioutil"
-// import "fmt"
-import "log"
-import "time"
 
-// import "strconv"
-// import "strings"
-import "launchpad.net/goyaml"
+import (
+   "fmt"
+   "log"
+   "time"
+   "strconv"
+   "strings"
+   "launchpad.net/goyaml"
+)
 
-/*
-The planner looks like a list of tasks:
+// 0001-01-01
+var dayZero = time.Time
 
-  - name:      string
-    date:      string
-    id:        num
-    completed: ~ or string (date)
-    items:
-    - [task] ...
-*/
 type Task struct {
-	Name      string
-	Date      time.Time
-	Id        int64
-	Completed time.Time
-	Parent    *int64 // the ID of the parent
+  id        int64
+  name      string
+  created   time.Time
+  modified  time.Time
+  completed time.Time
+  priority  uint8
+  items      []Task
 }
 
-type yamlTask struct {
-	Name      string
-	Date      string
-	Id        int64
-	Completed string
-	Items     []yamlTask
+type TaskMap struct {
+  tmap  map[int64]*Task
+  tasks []Task
+  unassigneds []int64 // ? keep track of the unassigned ones
+  unassigned int64    // number of unassigned tasks
+  max int64           // max id found
 }
 
-// Parse timesheet.yaml into a `yamlTask` tree
-//
-// Arguments:
-//
-//  - data: the yaml data
-//
-// @tested
-func parseYamlTask(data []byte) []yamlTask {
-	var res []yamlTask
-	goyaml.Unmarshal(data, &res)
-	return res
+func processTasks(data) TaskMap {
+  taskmap := make(TaskMap)
+  var yaml []interface{}
+  goyaml.Unmarshall(data, &yaml)
+  inflateTasks(yaml, &taskmap.tasks)
+  assembleTaskMap(&taskmap)
+  reassignTasks(&taskmap)
+  return taskmap
 }
 
-// Return the number of yamlTasks in the tree
-//
-// Arguments:
-//
-//  - yaml: list of toplevel yamltasks
-//
-// @tested
-func countYamlTasks(yaml *[]yamlTask, count *int64) {
-	for _, item := range *yaml {
-		*count += 1
-		countYamlTasks(&item.Items, count)
-	}
+func inflateTasks(yaml []interface{}, tasks *[]Task) {
+  *tasks = make([]Task, len(yaml))
+  var task Task
+  for item, i := range yaml {
+    populateTask(item, &(*tasks)[i])
+  }
 }
 
-// Go through all of the tasks that are unassigned
-//
-// Arguments:
-//
-//  - tasks: the hash of all the _Tasks_
-//  - max:   the highest task id we have
-//  - unassigneds: the list of ints
-func unfoldYamlTasks(yaml *[]yamlTask, tasks *map[int64]Task,
-	unassigned *int64, max *int64, parent *int64,
-	unassigneds *[]int64) {
-	var no_time time.Time
-	today := time.Now()
-	var good bool
-	var cparent []int64
-	for _, item := range *yaml {
-		good = true
-		if item.Id == 0 {
-			// if there was no ID given (comes out as zero), mark it as
-			// unassigned
-			item.Id = *unassigned
-			*unassigned -= 1
-			good = false
-		} else if item.Id < 0 {
-			// IDs should never be negative. Reassign.
-			log.Printf("WARNING: negative ID found %d (for task %q). Reassigning\n",
-				item.Id, item.Name)
-			item.Id = *unassigned
-			*unassigned -= 1
-			good = false
-		} else if _, present := (*tasks)[item.Id]; present {
-			// If there's a duplicate ID while processing, we just reassign
-			// the second one. This should never happen anyway unless you mess
-			// up the file yourself.
-			log.Printf("WARNING:  ID already used; %d (for task %q). Reassigning\n",
-				item.Id, item.Name)
-			item.Id = *unassigned
-			*unassigned -= 1
-			good = false
-		}
-		if item.Id > *max {
-			// keep track of the maximum used id
-			*max = item.Id
-		}
-		(*tasks)[item.Id] = Task{item.Name, parseDate(item.Date, today, today),
-			item.Id, parseDate(item.Completed, no_time, today), parent}
-		if len(item.Items) != 0 {
-			if good {
-				// The item has a good task ID, we just need a dummy in to pass
-				// the pointer of
-				cparent = make([]int64, 1)
-				cparent[0] = item.Id
-				unfoldYamlTasks(&item.Items, tasks, unassigned, max, &cparent[0], unassigneds)
-			} else {
-				// pass a reference to the unassigneds list
-				unfoldYamlTasks(&item.Items, tasks, unassigned, max,
-					&(*unassigneds)[-*unassigned-1], unassigneds)
-			}
-		}
-	}
+func fillTasks(yaml interface{}, tasks *[]Task) bool {
+  switch yaml := yaml.(type) {
+    case []interface{}:
+      inflateTasks(yaml, tasks)
+      return false
+    default:
+      return true
+  }
 }
 
-// Here we take a list of embedded yamlTasks, unfold them, and fill in IDs
-// where needed.
-//
-// Arguments:
-//
-//  - yaml: yamlTask
-//
-// 
-func processYamlTasks(yaml *[]yamlTask) map[int64]Task {
-	var count int64 = 0
-	countYamlTasks(yaml, &count)
-	// TODO make a few extra boxes?
-	tasks := make(map[int64]Task)
-	var unassigned int64 = -1
-	// prepare a list to map our unassigned task ids
-	unassigneds := make([]int64, count)
-	var max int64 = 1
-	var firstParent int64 = 0
-	unfoldYamlTasks(yaml, &tasks, &unassigned, &max, &firstParent, &unassigneds)
-    // reassignYamlTasks(&tasks, &max, &unassigneds, &unassigned)
-	return tasks
+// An individual task is either a dictionary, corresponding to what one would
+// expect, or a string [concise]
+// All dates follow the form outlined in utils.go.
+//   today|yesterday|tomorrow|mm-dd-yyyy
+// The title is not allowed to contain "|"
+// Condensed form = [id|] title [| created | completed]
+func populateTask(yaml interface{}, task *Task, today time.Time) {
+  val := reflect.ValueOf(yaml)
+  switch yaml.(type) {
+    case string:
+      if err := expandString(yaml.(string), task, today); err {
+        log.Printf("Unable to expand task: %q\n", yaml)
+      }
+    case map[string]interface{}:
+      if len (yaml) == 1 { // condensed string with children
+        for k, v := range yaml {
+          expandString(k, task, today)
+          fillTasks(v, &(*task).items)
+        }
+      } else { // it's an expanded string
+        mapToTask(yaml.(map[string]interface{}), task, today)
+      }
+    default:
+      log.Printf("Unable to parse task: %q\n", yaml)
+  }
 }
 
-/*
-func ParsePlanner(data []byte) map[int64]Task, error {
-    var result []yamlTask
-    err := goyaml.Unmarshal(data, &result)
-    if err != nil {
-        fmt.Println("Unable to parse planner.yaml")
-        return nil, err
+// Condensed form = [id|] title [| created | modified | completed]
+func expandString(yaml string, task *Task, today time.Time) bool {
+  parts := strings.Split(yaml, "|")
+  switch len(parts) {
+    case 0:
+      return true
+    case 1:
+      (*task).name = yaml
+    default:
+      at := 0
+      if id, err := strings.Atoi(parts[0]); err == nil {
+        (*task).id = id
+        at += 1
+      }
+      (*task).name = parts[at]
+      if len(parts) > at + 1 {
+        thedate, err := interfaceDate(parts[at + 1], today, today)
+        if err != nil {
+          log.Printf("Invalid created date: %q\n", parts[at + 1])
+        }
+        (*task).created = thedate
+      }
+      if len(parts) > at + 2 {
+        thedate, err := interfaceDate(parts[at + 2], today, today)
+        if err != nil {
+          log.Printf("Invalid modified date: %q\n", parts[at + 2])
+        }
+        (*task).modified = thedate
+      }
+      if len(parts) > at + 3 {
+        thedate, err := interfaceDate(parts[at + 3], dayZero, today)
+        if err != nil {
+          log.Printf("Invalid modified date: %q\n", parts[at + 3])
+        }
+        (*task).completed = thedate
+      }
+      if len(parts) > at + 4 {
+        log.Printf("Extra items in condensed form: %q", parts[at + 4:])
+      }
+  }
+}
+
+// Parse an ID and populate the task
+func fillId(val interface{}, task *Task) bool {
+  err := false
+  switch val := val.(type) {
+    case int:
+      (*task).id = int64(val)
+    case int64:
+      (*task).id = val
+    default:
+      err = true
+  }
+  return err
+}
+
+// Parse a Name and populate the task
+func fillName(val interface{}, task *Task) bool {
+  err := false
+  switch val := val.(type) {
+    case string:
+      (*task).name = val
+    case int:
+      (*task).name = strconv.Itoa(val)
+    default:
+      err = true
+  }
+  return err
+}
+
+// Parse a Date
+func interfaceDate(val interface{}, deftime time.Time, today time.Time) (time.Time, error) {
+  switch val := val.(type) {
+    case string:
+      return parseDate(val, deftime, today)
+    default:
+      var err DateError
+      err.Value = fmt.Sprintf("%q", val)
+      err.Default = deftime
+      return deftime, err
+  }
+}
+
+// Parse a priority. Can be A, B, C, "", or 0-3
+func fillPriority(val interface{}, task *Task) bool {
+  switch val := val.(type) {
+    case string:
+      switch val {
+        case "A", "B", "C":
+          (*task).priority = strings.Index("ABC", val)
+          return false
+        case "":
+          (*task).priority = 0
+          return false
+        default:
+          return true
+      }
+    case int, int64:
+      switch val {
+        case 0, 1, 2, 3:
+          (*task).priority = val
+          return false
+        default:
+          return true
+      }
+    default:
+      return true
+  }
+}
+
+// You have an interface, interpret the values of the map and populate the
+// task. today => is the date to use as "today" for interpreting dates
+func mapToTask(yaml map[string]interface{}, task *Task, today time.Time) {
+  (*task).created = today
+  (*task).modified = today
+  (*task).completed = dayZero
+  for key, val := range yaml {
+    switch key {
+      case "id":
+        // parse the id
+        if err := fillId(val, task); err != nil {
+          log.Printf("Invalid ID found: %q\n", val)
+        }
+      case "name":
+        // parse the name
+        if err := fillName(val, task); err != nil {
+          log.Printf("Task name must be text (%q found)\n", val)
+        }
+      case "created":
+        // parse the "created" date
+        if thedate, err := interfaceDate(val, today, today); err != nil {
+          log.Println(err.Error())
+        }
+        (*task).created = thedate
+      case "modified":
+        // parse the modified date
+        if thedate, err := interfaceDate(val, today, today); err != nil {
+          log.Println(err.Error())
+        }
+        (*task).modified = thedate
+      case "completed":
+        // parse the completed date, if any. Default is nil
+        thedate, err := interfaceDate(val, dayZero, today)
+        if err {
+          log.Println(err.Error())
+        }
+        (*task).completed = thedate
+      case "priority":
+        // parse the priority string
+        if err := fillPriority(val, task); err != nil {
+          log.Printf("Invalid priority found %q\n", val)
+        }
+      case "items":
+        // parse the items
+        if err := fillTasks(val, &(*task).items); err != nil {
+          log.Printf("Unable to parse sub items %q\n", val)
+        }
+      default:
+        log.Printf("Unrecognized key found: %q\n", key)
     }
-
-    tasks := make([]Task, len(res))
+  }
 }
-*/
-
-/***
-The timesheet looks like:
-"01-02-2006"
-
-weekname:
-    dayname:
-        - id-id start:stop OR
-        - id:    num
-          tid:   num
-          start: time
-          end:   time
-          completed: done
-**/
-// func ParseTimesheet(data []byte) map[Week]D
 

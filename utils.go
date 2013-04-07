@@ -3,6 +3,15 @@ package main
 import "time"
 import "log"
 
+type DateError struct {
+    Value string
+    Default time.Time
+}
+
+func (err *DateError) Error() string {
+    return "Unable to parse " + err.Value + ". Using default date."
+}
+
 // Parse the date
 //
 // Arguments:
@@ -14,27 +23,35 @@ import "log"
 // Returns: `time.Time`
 //
 // @tested
-func parseDate(date string, defaultt time.Time, today time.Time) time.Time {
+func parseDate(date string, defaultt time.Time, today time.Time) (time.Time, error) {
 	if date == "" {
-		return defaultt
+		return defaultt, nil
 	}
 	if date == "today" {
-		return today
+		return today, nil
 	}
 	if date == "yesterday" {
 		der, _ := time.ParseDuration("-24h")
-		return today.Add(der)
+		return today.Add(der), nil
+	}
+	if date == "tomorrow" {
+		der, _ := time.ParseDuration("24h")
+		return today.Add(der), nil
 	}
 	var err error
 	var tm time.Time
-	formats := []string{"01-02-2006", "01-02-06", "1-02-06", "01-2-06", "1-2-06", "1-2-2006", "01-2-2006", "1-02-2006"}
+  // here are all the kinds of dates we accept
+	formats := []string{"01-02-2006", "01-02-06", "1-02-06", "01-2-06",
+                      "1-2-06", "1-2-2006", "01-2-2006", "1-02-2006"}
 	for _, format := range formats {
 		tm, err = time.Parse(format, date)
 		if err == nil {
-			return tm
+			return tm, nil
 		}
 	}
-	log.Printf("Warning: unrecognizable date. Defaulting to today: %q\n", date)
-	return today
+  var terr DateError
+  terr.Value = date
+  terr.Default = defaultt
+	return today, terr
 }
 

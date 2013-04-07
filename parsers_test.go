@@ -7,10 +7,46 @@ import (
 
 // Hook up gocheck into the "go test" runner.
 func Test(t *testing.T) { TestingT(t) }
-
 type MySuite struct{}
-
 var _ = Suite(&MySuite{})
+
+// Setup of things:
+//   TaskMap {
+//      map map[id int64]*Task  // positive = real ids, negative = placeholder
+//      tasks []Task
+//      unassigneds []int64
+//      max int64
+//      unassigned int64
+//   }
+//   Task {
+//      parent *Task
+//      id int64
+//      name string
+//      created date
+//      modified date
+//      completed date [string or null]
+//      priority [A|B|C|D]
+//   }
+//   tasks.yml
+//      processTasks(bytes) -> TaskMap
+//          goyaml.Unmarshall(bytes, &[]interface{})
+//              take the raw yaml, turn parse it into a raw list of interfaces
+//              [might be maps, might be strings].
+//          inflateTasks([]interface{}, *[]Task)
+//              take the interfaces, inflate them into objects. Should be
+//              injected into a taskmap
+//          assembleTaskMap(*TaskMap) // do I want this to be copied?
+//              Go through the task tree and populate a task map.
+//          reassignTasks(TaskMap)
+//              Go through the unassigned tasks, assigning them new IDs
+
+
+
+
+
+
+
+
 
 var parseTests = []struct {
 	data  string

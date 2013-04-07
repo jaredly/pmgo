@@ -16,6 +16,7 @@ var _ = Suite(&MyUtilsSuite{})
 var deft = time.Date(2000, 1, 2, 0, 0, 0, 0, time.UTC)
 var today = time.Date(2000, 1, 2, 1, 2, 3, 0, time.UTC)
 var yesterday = time.Date(2000, 1, 1, 1, 2, 3, 0, time.UTC)
+var tomorrow = time.Date(2000, 1, 3, 1, 2, 3, 0, time.UTC)
 
 var pdData = []struct {
 	data  string
@@ -24,6 +25,7 @@ var pdData = []struct {
 	{"", deft},
 	{"today", today},
 	{"yesterday", yesterday},
+	{"tomorrow", tomorrow},
 	{"02-30-2001", time.Date(2001, 2, 30, 0, 0, 0, 0, time.UTC)},
 	{"05-20-1991", time.Date(1991, 5, 20, 0, 0, 0, 0, time.UTC)},
 	{"5-20-1991", time.Date(1991, 5, 20, 0, 0, 0, 0, time.UTC)},
